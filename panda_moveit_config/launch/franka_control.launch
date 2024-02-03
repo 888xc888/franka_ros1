@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<launch>
+  <arg name="robot_ip" default="192.168.1.1"/>
+  <arg name="load_gripper" default="true"/><!--这里我都加了默认值-->
+
+  <!-- Launch real-robot control -->
+  <include file="$(find franka_control)/launch/franka_control.launch" pass_all_args="true" />
+
+  <!-- By default use joint position controllers -->
+  <arg name="transmission" default="position" />
+  <!-- Start ROS controllers -->
+  <include file="$(dirname)/ros_controllers.launch" pass_all_args="true" />
+
+  <!-- as well as MoveIt demo -->
+  <include file="$(dirname)/demo.launch" pass_all_args="true">
+    <!-- robot description is loaded by franka_control.launch -->
+    <arg name="load_robot_description" value="false" />
+    <!-- MoveItSimpleControllerManager provides ros_control's JointTrajectory controllers
+         as well as GripperCommand actions -->
+    <arg name="moveit_controller_manager" value="ros_control" /><!--原来值为simple，我改成ros_control-->
+  </include>
+</launch>

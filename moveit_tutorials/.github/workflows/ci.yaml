@@ -1,0 +1,77 @@
+# This config uses industrial_ci (https://github.com/ros-industrial/industrial_ci.git).
+# For troubleshooting, see readme (https://github.com/ros-industrial/industrial_ci/blob/master/README.rst)
+
+name: CI
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+
+permissions:
+  contents: read # to fetch code (actions/checkout)
+
+jobs:
+  default:
+    strategy:
+      matrix:
+        env:
+          - IMAGE: master-source  # MoveIt master branch built on Melodic
+          - IMAGE: noetic-source  # MoveIt master branch built on Noetic
+            CLANG_TIDY: pedantic
+    env:
+      DOCKER_IMAGE: moveit/moveit:${{ matrix.env.IMAGE }}
+      UNDERLAY: /root/ws_moveit/install
+      CATKIN_LINT: true
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      BASEDIR: ${{ github.workspace }}/.work
+      CLANG_TIDY_BASE_REF: ${{ github.base_ref || github.ref }}
+      CXXFLAGS: -Werror -Wall -Wextra -Wwrite-strings -Wunreachable-code -Wpointer-arith -Wredundant-decls
+      CC: ${{ matrix.env.CLANG_TIDY && 'clang' }}
+      CXX: ${{ matrix.env.CLANG_TIDY && 'clang++' }}
+
+    name: ${{ matrix.env.IMAGE }}${{ matrix.env.CATKIN_LINT && ' + catkin_lint' || ''}}${{ matrix.env.CLANG_TIDY && ' + clang-tidy' || '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      # The target directory cache doesn't include the source directory because
+      # that comes from the checkout.  See "prepare target_ws for cache" task below
+      - name: Cache target workspace
+        if: "!matrix.env.CCOV"
+        uses: rhaschke/cache@main
+        with:
+          path: ${{ env.BASEDIR }}/target_ws
+          key: ${{ env.CACHE_PREFIX }}-${{ github.run_id }}
+          restore-keys: ${{ env.CACHE_PREFIX }}
+        env:
+          GHA_CACHE_SAVE: always
+          CACHE_PREFIX: target_ws-${{ matrix.env.IMAGE }}-${{ hashFiles('**/CMakeLists.txt', '**/package.xml') }}
+      - name: Cache ccache
+        uses: rhaschke/cache@main
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ${{ env.CACHE_PREFIX }}-${{ github.sha }}-${{ github.run_id }}
+          restore-keys: |
+            ${{ env.CACHE_PREFIX }}-${{ github.sha }}
+            ${{ env.CACHE_PREFIX }}
+        env:
+          GHA_CACHE_SAVE: always
+          CACHE_PREFIX: ccache-${{ matrix.env.IMAGE }}
+
+      - name: Run industrial_ci
+        uses: ros-industrial/industrial_ci@master
+        env: ${{ matrix.env }}
+
+      - name: Upload test artifacts (on failure)
+        uses: actions/upload-artifact@v3
+        if: failure() && (steps.ici.outputs.run_target_test || steps.ici.outputs.target_test_results)
+        with:
+          name: test-results-${{ matrix.env.IMAGE }}
+          path: ${{ env.BASEDIR }}/target_ws/**/test_results/**/*.xml
+      - name: Prepare target_ws for cache
+        if: ${{ always() }}
+        run: |
+          du -sh ${{ env.BASEDIR }}/target_ws
+          sudo find ${{ env.BASEDIR }}/target_ws -wholename '*/test_results/*' -delete
+          sudo rm -rf ${{ env.BASEDIR }}/target_ws/src ${{ env.BASEDIR }}/target_ws/logs
+          du -sh ${{ env.BASEDIR }}/target_ws

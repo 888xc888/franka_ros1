@@ -1,0 +1,6 @@
+<launch>
+    <!--启动franka_control节点，负责与机械臂底层通信-->
+    <include file="$(find franka_control)/launch/franka_control.launch" />
+    <!--启动moveit节点，负责轨迹规划等-->
+    <include file="$(find panda_moveit_config)/launch/demo.launch" />
+</launch>
