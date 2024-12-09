@@ -1,2 +1,2 @@
 # franka_ros1
-用ros1控制franka research 3机械臂运动
+用ros1控制franka research 3机械臂运动，修改官方的panda_moveit包使之适用于fr3机械臂
